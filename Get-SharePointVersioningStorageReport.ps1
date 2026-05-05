@@ -12,11 +12,17 @@ The URL of your SharePoint Online tenant admin site (e.g., https://yourorg-admin
 .PARAMETER OutputPath
 The directory path where reports will be saved. Defaults to the current user's Downloads folder.
 
+.PARAMETER IncludeOneDrive
+Switch to include OneDrive for Business sites in the analysis. Defaults to $false (SharePoint sites only).
+
 .EXAMPLE
 .\Get-SharePointVersioningStorageReport.ps1
 
 .EXAMPLE
-.\Get-SharePointVersioningStorageReport.ps1 -TenantAdminUrl "https://yourorg-admin.sharepoint.com" -OutputPath "\\melbourne.vic.gov.au\UserData$\Home\WILSMI\Downloads"
+.\Get-SharePointVersioningStorageReport.ps1 -TenantAdminUrl "https://yourorg-admin.sharepoint.com"
+
+.EXAMPLE
+.\Get-SharePointVersioningStorageReport.ps1 -TenantAdminUrl "https://yourorg-admin.sharepoint.com" -OutputPath "C:\Reports" -IncludeOneDrive
 
 .NOTES
 Requires PnP.PowerShell module. The script will attempt to install it if not present.
@@ -24,10 +30,13 @@ Requires PnP.PowerShell module. The script will attempt to install it if not pre
 
 param(
     [Parameter(Mandatory = $false)]
-    [string]$TenantAdminUrl = "https://pinkpanda-admin.sharepoint.com",
-    
+    [string]$TenantAdminUrl,
+
     [Parameter(Mandatory = $false)]
-    [string]$OutputPath = "\\melbourne.vic.gov.au\UserData$\Home\WILSMI\Downloads"
+    [string]$OutputPath = $env:USERPROFILE + "\Downloads",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$IncludeOneDrive = $false
 )
 
 # Ensure output directory exists
@@ -53,10 +62,14 @@ function Ensure-PnPModule {
 # Connect to SharePoint tenant
 function Connect-ToSharePoint {
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
         [string]$AdminUrl
     )
-    
+
+    if ([string]::IsNullOrEmpty($AdminUrl)) {
+        $AdminUrl = Read-Host "Enter your SharePoint Online Tenant Admin URL (e.g., https://yourorg-admin.sharepoint.com)"
+    }
+
     try {
         Write-Host "Connecting to SharePoint Online tenant: $AdminUrl" -ForegroundColor Cyan
         Connect-PnPOnline -Url $AdminUrl -Interactive
@@ -70,9 +83,14 @@ function Connect-ToSharePoint {
 
 # Get all SharePoint sites
 function Get-AllSharePointSites {
+    param(
+        [Parameter(Mandatory = $false)]
+        [bool]$IncludeOneDrive = $false
+    )
+
     try {
-        Write-Host "Retrieving all SharePoint Online sites..." -ForegroundColor Cyan
-        $sites = Get-PnPTenantSite -IncludeOneDriveSites $false | Where-Object { $_.Status -eq "Active" }
+        Write-Host "Retrieving all SharePoint Online sites (OneDrive: $IncludeOneDrive)..." -ForegroundColor Cyan
+        $sites = Get-PnPTenantSite -IncludeOneDriveSites $IncludeOneDrive | Where-Object { $_.Status -eq "Active" }
         Write-Host "Found $($sites.Count) active SharePoint sites." -ForegroundColor Green
         return $sites
     }
@@ -148,12 +166,12 @@ function Main {
     
     # Ensure module is installed
     Ensure-PnPModule
-    
+
     # Connect to SharePoint
     Connect-ToSharePoint -AdminUrl $TenantAdminUrl
-    
+
     # Get all sites
-    $sites = Get-AllSharePointSites
+    $sites = Get-AllSharePointSites -IncludeOneDrive $IncludeOneDrive
     if (-not $sites) {
         Write-Host "No sites found or error retrieving sites." -ForegroundColor Red
         exit 1
@@ -212,13 +230,26 @@ function Main {
     Write-Host "Report Summary" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "Total Sites Analyzed: $($siteReports.Count)" -ForegroundColor White
-    Write-Host "Total Versioning Storage: $([math]::Round($totalTenantVersioningStorage / 1GB, 2)) GB" -ForegroundColor White
+
+    $totalVersioningGB = [math]::Round($totalTenantVersioningStorage / 1GB, 2)
+    Write-Host "Total Versioning Storage: $totalVersioningGB GB" -ForegroundColor White
+
+    # Calculate version reduction recommendations
+    $reduction50 = [math]::Round($totalVersioningGB * 0.5, 2)
+    $reduction75 = [math]::Round($totalVersioningGB * 0.75, 2)
+
+    Write-Host ""
+    Write-Host "Version Reduction Estimates:" -ForegroundColor Cyan
+    Write-Host "  - Reducing to 50% versions: Save ~$reduction50 GB" -ForegroundColor Yellow
+    Write-Host "  - Reducing to 25% versions: Save ~$reduction75 GB" -ForegroundColor Yellow
+
+    Write-Host ""
     Write-Host "Reports Generated:" -ForegroundColor White
     Write-Host "  - Site Report: $reportPath" -ForegroundColor Cyan
     Write-Host "  - Detailed Report: $detailedReportPath" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
-    
+
     # Disconnect
     Disconnect-PnPOnline
 }
