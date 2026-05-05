@@ -10,7 +10,7 @@ storage consumed by file versioning across all sites and libraries.
 The URL of your SharePoint Online tenant admin site (e.g., https://yourorg-admin.sharepoint.com)
 
 .PARAMETER OutputPath
-The directory path where reports will be saved. Defaults to the current user's Downloads folder.
+The directory path where reports will be saved. Defaults to the current directory where the script is run.
 
 .PARAMETER IncludeOneDrive
 Switch to include OneDrive for Business sites in the analysis. Defaults to $false (SharePoint sites only).
@@ -33,7 +33,7 @@ param(
     [string]$TenantAdminUrl,
 
     [Parameter(Mandatory = $false)]
-    [string]$OutputPath = $env:USERPROFILE + "\Downloads",
+    [string]$OutputPath = (Get-Location).Path,
 
     [Parameter(Mandatory = $false)]
     [switch]$IncludeOneDrive = $false
